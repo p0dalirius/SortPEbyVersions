@@ -34,39 +34,48 @@ def pe_get_version(pathtopefile):
 
 def download_pdb(download_dir, pathtopefile):
     pdbname, guid, pdbage = get_pe_debug_infos(pathtopefile)
-    download_url = "http://msdl.microsoft.com/download/symbols/%s/%s%X/%s" % (pdbname, guid.upper(), pdbage, pdbname)
-    print("[>] Downloading %s" % download_url)
-    r = requests.head(
-        download_url,
-        headers={"User-Agent": "Microsoft-Symbol-Server/10.0.10036.206"},
-        allow_redirects=True
-    )
-    if r.status_code == 200:
-        target_file = download_dir + os.path.sep + pdbname
-        with progress.Progress() as p:
-            progress_bar, csize = p.add_task("[cyan]Downloading %s" % pdbname, total=int(r.headers["Content-Length"])), 1024*16
-            pdb = requests.get(r.url, headers={"User-Agent": "Microsoft-Symbol-Server/10.0.10036.206"}, stream=True)
-            with open(target_file, "wb") as f:
-                for chunk in pdb.iter_content(chunk_size=csize):
-                    f.write(chunk)
-                    p.update(progress_bar, advance=len(chunk))
-    else:
-        print("[!] (HTTP %d) Could not find %s " % (r.status_code, download_url))
+    if pdbname is not None and guid is not None and pdbage is not None:
+        download_url = "http://msdl.microsoft.com/download/symbols/%s/%s%X/%s" % (pdbname, guid.upper(), pdbage, pdbname)
+        print("[>] Downloading %s" % download_url)
+        r = requests.head(
+            download_url,
+            headers={"User-Agent": "Microsoft-Symbol-Server/10.0.10036.206"},
+            allow_redirects=True
+        )
+        if r.status_code == 200:
+            target_file = download_dir + os.path.sep + pdbname
+            with progress.Progress() as p:
+                progress_bar, csize = p.add_task("[cyan]Downloading %s" % pdbname, total=int(r.headers["Content-Length"])), 1024*16
+                pdb = requests.get(r.url, headers={"User-Agent": "Microsoft-Symbol-Server/10.0.10036.206"}, stream=True)
+                with open(target_file, "wb") as f:
+                    for chunk in pdb.iter_content(chunk_size=csize):
+                        f.write(chunk)
+                        p.update(progress_bar, advance=len(chunk))
+        else:
+            print("[!] (HTTP %d) Could not find %s " % (r.status_code, download_url))
 
 
 def get_pe_debug_infos(pathtopefile):
-    p = pefile.PE(pathtopefile, fast_load=False)
-    pedata = {d.name: d for d in p.OPTIONAL_HEADER.DATA_DIRECTORY}
-    raw_debug_data = [e for e in p.parse_debug_directory(pedata["IMAGE_DIRECTORY_ENTRY_DEBUG"].VirtualAddress, pedata["IMAGE_DIRECTORY_ENTRY_DEBUG"].Size) if e.entry is not None]
-    raw_debug_data = raw_debug_data[0].entry
+    try:
+        p = pefile.PE(pathtopefile, fast_load=False)
+        pedata = {d.name: d for d in p.OPTIONAL_HEADER.DATA_DIRECTORY}
+        raw_debug_data = [e for e in p.parse_debug_directory(pedata["IMAGE_DIRECTORY_ENTRY_DEBUG"].VirtualAddress, pedata["IMAGE_DIRECTORY_ENTRY_DEBUG"].Size) if e.entry is not None]
+        raw_debug_data = raw_debug_data[0].entry
 
-    guid = "%08X%04X%04X%s" % (
-        raw_debug_data.Signature_Data1,
-        raw_debug_data.Signature_Data2,
-        raw_debug_data.Signature_Data3,
-        binascii.hexlify(raw_debug_data.Signature_Data4).decode("utf-8").upper()
-    )
-    return raw_debug_data.PdbFileName.strip(b'\x00').decode("utf-8"), guid, raw_debug_data.Age
+        guid = "%08X%04X%04X%s" % (
+            raw_debug_data.Signature_Data1,
+            raw_debug_data.Signature_Data2,
+            raw_debug_data.Signature_Data3,
+            binascii.hexlify(raw_debug_data.Signature_Data4).decode("utf-8").upper()
+        )
+        pdb_filename = raw_debug_data.PdbFileName.strip(b'\x00').decode("utf-8")
+        if '\\' in pdb_filename:
+            pdb_filename = pdb_filename.split('\\')[-1]
+        if '/' in pdb_filename:
+            pdb_filename = pdb_filename.split('/')[-1]
+        return pdb_filename, guid, raw_debug_data.Age
+    except Exception as e:
+        return None, None, None
 
 
 def parseArgs():
@@ -77,11 +86,12 @@ def parseArgs():
     return parser.parse_args()
 
 
-def process(path_to_file, versions, dump_dir, debug):
+def process(source_dir, path_to_file, versions, dump_dir, debug):
     try:
         pev = pe_get_version(path_to_file)
         filename = os.path.basename(path_to_file)
         sha256hash = file_sha256sum(path_to_file)
+        path_in_archive = os.path.dirname(path_to_file.replace(source_dir, "", 1))
 
         if filename not in versions.keys():
             versions[filename] = {}
@@ -97,7 +107,7 @@ def process(path_to_file, versions, dump_dir, debug):
                 "path": path_to_file,
                 "sha256": sha256hash
             }
-            final_dir = dump_dir + "/%s/%s/" % (filename, pev["FileVersion"])
+            final_dir = dump_dir + "%s/%s/%s/" % (path_in_archive, filename, pev["FileVersion"])
             if not os.path.exists(final_dir):
                 os.makedirs(final_dir, exist_ok=True)
             saved_filename = final_dir + os.path.sep + os.path.basename(filename)
@@ -111,6 +121,8 @@ def process(path_to_file, versions, dump_dir, debug):
             download_pdb(download_dir=final_dir, pathtopefile=saved_filename)
     except pefile.PEFormatError as e:
         pass
+    except Exception as ex:
+        print("[Exception] %s" % ex)
     return versions
 
 
@@ -123,6 +135,7 @@ if __name__ == '__main__':
         for file in files:
             if any([file.lower().endswith(ext) for ext in extensions]):
                 process(
+                    source_dir=options.source_dir,
                     path_to_file=os.path.join(root, file),
                     versions=versions,
                     dump_dir=options.archive_dir,
