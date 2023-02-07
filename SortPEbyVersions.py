@@ -35,7 +35,7 @@ def pe_get_version(pathtopefile):
     )
     data["ProductVersion"] = "%d.%d.%d.%d" % (
         (p.VS_FIXEDFILEINFO[0].ProductVersionMS >> 16) & 0xffff,
-        (p.VS_FIXEDFILEINFO[0].ProductVersionMS >> 0) & 0xff,
+        (p.VS_FIXEDFILEINFO[0].ProductVersionMS >> 0) & 0xffff,
         (p.VS_FIXEDFILEINFO[0].ProductVersionLS >> 16) & 0xffff,
         (p.VS_FIXEDFILEINFO[0].ProductVersionLS >> 0) & 0xffff
     )
@@ -68,7 +68,6 @@ def download_pdb(download_dir, pathtopefile):
 def get_pe_debug_infos(pathtopefile):
     try:
         p = pefile.PE(pathtopefile, fast_load=False)
-        print(p)
         pedata = {d.name: d for d in p.OPTIONAL_HEADER.DATA_DIRECTORY}
         raw_debug_data = [e for e in p.parse_debug_directory(pedata["IMAGE_DIRECTORY_ENTRY_DEBUG"].VirtualAddress, pedata["IMAGE_DIRECTORY_ENTRY_DEBUG"].Size) if e.entry is not None]
         raw_debug_data = raw_debug_data[0].entry
@@ -90,9 +89,9 @@ def get_pe_debug_infos(pathtopefile):
 
 
 def parseArgs():
-    parser = argparse.ArgumentParser(description="")
-    parser.add_argument("-s", "--source-dir", default=None, required=True, help='')
-    parser.add_argument("-a", "--archive-dir", default=None, required=True, help='')
+    parser = argparse.ArgumentParser(description="Sort Portable Executable (PE) files by their version and download debug symbols if existing.")
+    parser.add_argument("-s", "--source-dir", default=None, required=True, help='Source directory where to get PE files.')
+    parser.add_argument("-a", "--archive-dir", default=None, required=True, help='Archive directory where to store PE files by versions.')
     parser.add_argument("-v", "--verbose", default=False, action="store_true", help='Verbose mode. (default: False)')
     return parser.parse_args()
 
