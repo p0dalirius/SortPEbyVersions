@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# File name          : ExtractAndSortPEbyVersions.py
+# File name          : SortPEbyVersions.py
 # Author             : Podalirius (@podalirius_)
-# Date created       : 05 Feb 2023
+# Date created       : 7 Feb 2023
 
 
 import argparse
@@ -27,8 +27,18 @@ def file_sha256sum(path_to_file):
 def pe_get_version(pathtopefile):
     data = {"FileVersion": "", "ProductVersion": ""}
     p = pefile.PE(pathtopefile)
-    data["FileVersion"] = "%d.%d.%d.%d" % ((p.VS_FIXEDFILEINFO[0].FileVersionMS >> 16) & 0xffff, (p.VS_FIXEDFILEINFO[0].FileVersionMS >> 0) & 0xffff, (p.VS_FIXEDFILEINFO[0].FileVersionLS >> 16) & 0xffff, (p.VS_FIXEDFILEINFO[0].FileVersionLS >> 0) & 0xffff)
-    data["ProductVersion"] = "%d.%d.%d.%d" % ((p.VS_FIXEDFILEINFO[0].ProductVersionMS >> 16) & 0xffff, (p.VS_FIXEDFILEINFO[0].ProductVersionMS >> 0) & 0xff, (p.VS_FIXEDFILEINFO[0].ProductVersionLS >> 16) & 0xffff, (p.VS_FIXEDFILEINFO[0].ProductVersionLS >> 0) & 0xffff)
+    data["FileVersion"] = "%d.%d.%d.%d" % (
+        (p.VS_FIXEDFILEINFO[0].FileVersionMS >> 16) & 0xffff,
+        (p.VS_FIXEDFILEINFO[0].FileVersionMS >> 0) & 0xffff,
+        (p.VS_FIXEDFILEINFO[0].FileVersionLS >> 16) & 0xffff,
+        (p.VS_FIXEDFILEINFO[0].FileVersionLS >> 0) & 0xffff
+    )
+    data["ProductVersion"] = "%d.%d.%d.%d" % (
+        (p.VS_FIXEDFILEINFO[0].ProductVersionMS >> 16) & 0xffff,
+        (p.VS_FIXEDFILEINFO[0].ProductVersionMS >> 0) & 0xff,
+        (p.VS_FIXEDFILEINFO[0].ProductVersionLS >> 16) & 0xffff,
+        (p.VS_FIXEDFILEINFO[0].ProductVersionLS >> 0) & 0xffff
+    )
     return data
 
 
@@ -58,6 +68,7 @@ def download_pdb(download_dir, pathtopefile):
 def get_pe_debug_infos(pathtopefile):
     try:
         p = pefile.PE(pathtopefile, fast_load=False)
+        print(p)
         pedata = {d.name: d for d in p.OPTIONAL_HEADER.DATA_DIRECTORY}
         raw_debug_data = [e for e in p.parse_debug_directory(pedata["IMAGE_DIRECTORY_ENTRY_DEBUG"].VirtualAddress, pedata["IMAGE_DIRECTORY_ENTRY_DEBUG"].Size) if e.entry is not None]
         raw_debug_data = raw_debug_data[0].entry
