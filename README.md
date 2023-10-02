@@ -1,4 +1,4 @@
-# SortPEbyVersions
+![](./.github/banner.png)
 
 <p align="center">
     A Python script to sort Portable Executable (PE) files by their version and download debug symbols if existing.
